@@ -143,6 +143,7 @@ function matsubara_decomposition(sd::DrudeLorentz, num_modes::Int, β::AbstractF
 
     γ, c
 end
+matsubara_decomposition_imaginary(sd::DrudeLorentz, num_modes::Int, β::AbstractFloat) = sd.γ, -1im * sd.λ * sd.γ / sd.Δs^2
 
 """
     pade_decomposition(sd::DrudeLorentz, num_modes::Int, β::AbstractFloat)
