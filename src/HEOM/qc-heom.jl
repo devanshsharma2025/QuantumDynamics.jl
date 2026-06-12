@@ -4,7 +4,7 @@ using OrdinaryDiffEq
 using ..HEOMStructure
 using ..SpectralDensities, ..Solvents, ..Utilities
 
-function single_propagate(phasespacepoints, solvent, Hamiltonian, sops, nveclist, npluslocs, nminuslocs, γ, c, β, decay, ρ0exp, ntimes, dt, verbose)
+function single_propagate(phasespacepoints, solvent, Hamiltonian, sops, nveclist, npluslocs, nminuslocs, γ, c, β, decay, ρ0exp, ntimes, dt, extraargs::Utilities.DiffEqArgs, verbose)
     tspan = (0.0, ntimes * dt)
     sdim = size(Hamiltonian, 1)
     ρs = zeros(ComplexF64, ntimes+1, sdim, sdim)
@@ -15,7 +15,7 @@ function single_propagate(phasespacepoints, solvent, Hamiltonian, sops, nveclist
     for (j, ps) in enumerate(phasespacepoints)
         params = HEOMStructure.HEOMParams(Hamiltonian, nothing, nothing, (solvent, ps), sops, nveclist, npluslocs, nminuslocs, γ, c, 0.0, β, decay, workspace, tmp1)
         prob = ODEProblem{true}(HEOMStructure.scaled_HEOM_RHS!, ρ0exp, tspan, params)
-        sol = solve(prob, Tsit5(), reltol=1e-5, abstol=1e-5, saveat=dt)
+        sol = solve(prob, extraargs.solver, reltol=extraargs.reltol, abstol=extraargs.abstol, saveat=dt)
         for t=1:length(sol)
             @inbounds ρs[t, :, :] .+= sol.u[t][:, :, 1]
         end
@@ -26,7 +26,7 @@ function single_propagate(phasespacepoints, solvent, Hamiltonian, sops, nveclist
     ρs, Npoints
 end
 
-function propagate(; Hamiltonian::Matrix{ComplexF64}, Jw::AbstractVector{<:SpectralDensities.SpectralDensity}, solvent::Solvents.Solvent, ρ0::Matrix{ComplexF64}, β::Real, dt::Real, ntimes::Int, Lmax::Int, sops::Vector{Matrix{ComplexF64}}, verbose::Bool=false)
+function propagate(; Hamiltonian::Matrix{ComplexF64}, Jw::AbstractVector{<:SpectralDensities.SpectralDensity}, solvent::Solvents.Solvent, ρ0::Matrix{ComplexF64}, β::Real, dt::Real, ntimes::Int, Lmax::Int, sops::Vector{Matrix{ComplexF64}}, extraargs::Utilities.DiffEqArgs=Utilities.DiffEqArgs(), verbose::Bool=false)
     num_modes = 0
     nbaths = length(Jw)
     γ = zeros(nbaths, num_modes + 1)
@@ -53,7 +53,7 @@ function propagate(; Hamiltonian::Matrix{ComplexF64}, Jw::AbstractVector{<:Spect
     ρ0exp[:, :, 1] .= ρ0
     chunks = Iterators.partition(solvent, cld(length(solvent), Threads.nthreads()))
     ρtasks = map(enumerate(chunks)) do (ind, chunk)
-        Threads.@spawn single_propagate(chunk, solvent, Hamiltonian, sops, nveclist, npluslocs, nminuslocs, γ, c, β, decay, copy(ρ0exp), ntimes, dt, verbose && (ind==1))
+        Threads.@spawn single_propagate(chunk, solvent, Hamiltonian, sops, nveclist, npluslocs, nminuslocs, γ, c, β, decay, copy(ρ0exp), ntimes, dt, extraargs, verbose && (ind==1))
     end
     results = fetch.(ρtasks)
     ρs = zero(results[1][1])
