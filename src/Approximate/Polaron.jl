@@ -33,14 +33,14 @@ function matrix_exponential(mat::AbstractMatrix{<:Number})
     exp_mat
 end
 
-function variational_site_energy(; J::SpectralDensities.SpectralDensity, svec=[1.0 -1.0], F::Vector{Float64})
-    energy_correction = svec[i, :].^2 .* Utilities.trapezoid(J.ω, (J.jw ./ J.ω .* (F .^ 2 .- 2 * F))) / π
+function variational_site_energy(; bath_indx::Int, J::SpectralDensities.SpectralDensity, svec=[1.0 -1.0], F::Vector{Float64})
+    energy_correction = svec[bath_indx, :].^2 .* Utilities.trapezoid(J.ω, (J.jw ./ J.ω .* (F .^ 2 .- 2 * F))) / π
 
     energy_correction
 end
 
 function variational_polaron_factor(; J::SpectralDensities.SpectralDensity, β::Real, F::Vector{Float64})
-    J_var = copy(J)
+	J_var = typeof(J)(getfield.(Ref(J), fieldnames(typeof(J)))...)
     J_var.jw .*= F .^ 2
     var_polaron_factor = SpectralDensities.polaron_shielding(J_var, β)
 
@@ -52,7 +52,7 @@ function variational_hamiltonian(; Hamiltonian::AbstractMatrix{<:Number}, Jw::Ab
     N = size(Hamiltonian, 1)
     Γ = zeros(N, N)
     for (i, J) in enumerate(Jw)
-        energy_correction = variational_site_energy(; J=J, svec=svec, F=var_param[i])
+        energy_correction = variational_site_energy(; bath_indx=i, J=J, svec=svec, F=var_param[i])
         H .+= diagm(energy_correction) 
 	    var_polaron_factor = variational_polaron_factor(; J=J, β=β, F=var_param[i])
         for j=1:N, k=j+1:N
@@ -90,7 +90,7 @@ function variational_parameter(; Hamiltonian::AbstractMatrix{<:Number}, Jw::Abst
         ρsn_sum = 0.0 + 0.0im
         ρnm_hκΔsmn_sum = 0.0 + 0.0im
         for j=1:N
-            ρsn_sum += ρSeq[j,j] * svec[j,j] ^ 2
+            ρsn_sum += ρSeq[j,j] * svec[i,j] ^ 2
             for k=1:N
                 if k != j
 	                Δs = svec[i,j] - svec[i,k]
@@ -118,7 +118,7 @@ end
 
 function variational_polaron_transform(; Hamiltonian::AbstractMatrix{<:Number}, Jw::AbstractVector{SpectralDensities.SpectralDensity}, β::Real, svec=[1.0 -1.0], init_var_param::Vector, tolerance::Real)
     @assert length(init_var_param) == length(Jw)
-    @assert all(length(init_var_param[i]) == length(Jw.jw[i]) for i in eachindex(init_var_param))
+    @assert all(length(init_var_param[i]) == length((Jw[i]).jw) for i in eachindex(init_var_param))
     for i in eachindex(init_var_param)
         @assert all(0.0 <= x <= 1.0 for x in init_var_param[i])
     end
@@ -128,12 +128,12 @@ function variational_polaron_transform(; Hamiltonian::AbstractMatrix{<:Number}, 
         converged = 1
         new_Fs, varH = variational_parameter(; Hamiltonian=Hamiltonian, Jw=Jw, β=β, svec=svec, old_var_param=old_Fs)
         for i=1:length(Jw)
-            if max(abs.(new_Fs[i] .- old_Fs[i])) > tolerance
+            if maximum(abs.(new_Fs[i] .- old_Fs[i])) > tolerance
                 converged *= 0
             end 
         end
         if converged == 1
-            return varH
+            return varH, new_Fs
         else
             old_Fs = copy(new_Fs)
         end
