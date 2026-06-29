@@ -5,11 +5,11 @@ This module provides the necessary tools for doing HEOM simulations. While the e
 ## API
 
 ```@docs
-HEOM.get_vecs
+HEOMStructure.get_vecs
 ```
 
 ```@docs
-HEOM.setup_simulation
+HEOMStructure.setup_simulation
 ```
 
 ```@docs

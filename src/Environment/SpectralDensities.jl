@@ -143,6 +143,7 @@ function matsubara_decomposition(sd::DrudeLorentz, num_modes::Int, β::AbstractF
 
     γ, c
 end
+matsubara_decomposition_imaginary(sd::DrudeLorentz, num_modes::Int, β::AbstractFloat) = sd.γ, -1im * sd.λ * sd.γ / sd.Δs^2
 
 """
     pade_decomposition(sd::DrudeLorentz, num_modes::Int, β::AbstractFloat)
@@ -323,13 +324,18 @@ function discretize(sd::ContinuousSpectralDensity, num_osc::Int)
     for j in axes(integral_jw_over_w, 1)
         λj = (k - 0.5) * per_mode_λ
         if integral_jw_over_w[j] ≥ λj
+            @assert integral_jw_over_w[j-1] < λj "The quadrature grid is too wide."
+            # @assert integral_jw_over_w[j-1] < λj "The quadrature grid is too wide. $(integral_jw_over_w[j-1]), $(integral_jw_over_w[j]), $(λj)"
             ratio = (λj - integral_jw_over_w[j-1]) / (integral_jw_over_w[j] - integral_jw_over_w[j-1])
             ωs[k] = ratio * dω + ω[j-1]
             k += 1
         end
+        if k>num_osc
+            break
+        end
     end
 
-    cs = sqrt(2 * per_mode_λ) / Δs * ωs
+    cs = sqrt(2 * per_mode_λ) * ωs / Δs
     ωs, cs
 end
 
