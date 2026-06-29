@@ -2,7 +2,7 @@
 module Solvents
 
 using Distributions: MvNormal
-using LinearAlgebra: Diagonal
+using LinearAlgebra: Diagonal, diagm
 
 """Abstract type for every solvent.
 Every solvent needs to implement `Base.iterate`, which returns the
@@ -142,6 +142,14 @@ function propagate_forced_bath(bath::Solvent, state::PhaseSpace,
     end
 
     eltype(bath)(q, p)
+end
+
+function get_Vint(ps::HarmonicPhaseSpace, hb::HarmonicBath, t::Float64)
+    Ham = zero(diagm(hb.s[1]))
+    for (q, p, ω, c, s) in zip(ps.q, ps.p, hb.ω, hb.c, hb.s)
+        Ham += - sum((q .* cos.(ω * t) + p .* sin.(ω * t) ./ ω) .* c) * diagm(s)
+    end
+    Ham
 end
 
 end
