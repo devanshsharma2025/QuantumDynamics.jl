@@ -9,15 +9,29 @@ const statetostate_references = """
     ddt_hamiltonian_flows(; ρs::AbstractArray{<:Complex,3}, H0::AbstractMatrix{<:Complex})
 Returns a time-series of time derivative of state-to-state flows (\\dot P^H_{j \\leftarrow k}(t)) in each state (j) for a Hermitian or non-Hermitian system Hamiltonian H0.
 """
-function ddt_hamiltonian_flows(; ρs::AbstractArray{<:Complex,3}, H0::AbstractMatrix{<:Complex})
+function ddt_hamiltonian_flows(; t::AbstractArray{<:Real,1}, ρs::AbstractArray{<:Complex,3}, H0::AbstractMatrix{<:Complex}, external_fields::Union{Nothing,Vector{Utilities.ExternalField}})
     dim = size(H0, 1)
     N = size(ρs, 1)
     ddt_H0_flows = zeros(eltype(ρs), dim, N, dim)
 
+    H0s = zeros(eltype(ρs), N, dim, dim)
+    for n in 1:N
+        H0s[n,:,:] .= H0
+    end
+    if !isnothing(external_fields)
+        display("ef")
+        for ef in external_fields
+            Ht(x) = ef.V(x) * ef.coupling_op
+            for n in 1:N
+                H0s[n,:,:] .+= Ht(t[n])
+            end
+        end
+    end
+
     for j in 1:dim
         for n in 1:N
             for k in 1:dim
-                ddt_H0_flows[j,n,k] = 1im * (ρs[n,j,k] * (H0')[k,j] - H0[j,k] * ρs[n,k,j])
+                ddt_H0_flows[j,n,k] = 1im * (ρs[n,j,k] * (H0s[n,:,:]')[k,j] - (H0s[n,:,:])[j,k] * ρs[n,k,j])
             end
         end
     end
@@ -77,8 +91,8 @@ end
     statetostate(; t::AbstractArray{<:Real,1}, ρs::AbstractArray{<:Complex,3}, H0::AbstractMatrix{<:Complex}, L::Union{Nothing,Vector{Matrix{ComplexF64}}}=nothing)
 Returns a time-series of total state-to-state flows (P_{j \\leftarrow k}(t)) (and its time derivative) in each state (j) which is the sum of flows arising due to Hamiltonian H0 and Lindbald jump operators L (if any).
 """
-function statetostate(; t::AbstractArray{<:Real,1}, ρs::AbstractArray{<:Complex,3}, H0::AbstractMatrix{<:Complex}, L::Union{Nothing,Vector{Matrix{ComplexF64}}}=nothing)
-    ddt_H0_flows = ddt_hamiltonian_flows(; ρs, H0)
+function statetostate(; t::AbstractArray{<:Real,1}, ρs::AbstractArray{<:Complex,3}, H0::AbstractMatrix{<:Complex}, L::Union{Nothing,Vector{Matrix{ComplexF64}}}=nothing, external_fields::Union{Nothing,Vector{Utilities.ExternalField}})
+    ddt_H0_flows = ddt_hamiltonian_flows(; t, ρs, H0, external_fields)
     ddt_L_flows = zero(ddt_H0_flows)
     if !isnothing(L)
         ddt_L_flows = ddt_lindblad_flows(; ρs, L)
