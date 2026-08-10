@@ -103,7 +103,7 @@ function variational_parameter(; Hamiltonian::AbstractMatrix{<:Number}, Jw::Abst
     N = size(Hamiltonian, 1)
 
     varH, Γ = variational_hamiltonian(; Hamiltonian=Hamiltonian, Jw=Jw, svec=svec, β=β, var_param=old_var_param)
-    κ = matrix_exponential(-1/2 * Γ)
+    κ = exp.(-1/2 * Γ) .- diagm(fill(1.0,size(Γ,1))) #κ[n,n]=0
     println(κ)
     ρSeq = variational_thermal_system_densitymatrix(; var_Hamiltonian=varH, β=β)
     println(ρSeq)
@@ -124,9 +124,9 @@ function variational_parameter(; Hamiltonian::AbstractMatrix{<:Number}, Jw::Abst
         println(ρsn_sum)
         println(ρnm_hκΔsmn_sum)
         F = 1 ./ (1 .- (coth.(J.ω * β / 2) ./ J.ω .* ρnm_hκΔsmn_sum ./ ρsn_sum) / 2)
-        push!(var_param, F)
+        push!(var_param, Float64.(F))
+        println(Float64.(F)[1:5])
     end
-
     var_param, varH
 end
 
@@ -165,6 +165,41 @@ function variational_polaron_transform(; Hamiltonian::AbstractMatrix{<:Number}, 
             count +=1
         end
     end
+end
+
+function gibbs_bogoliubov_free_energy(; var_Hamiltonian::AbstractMatrix{<:Number}, β::Real)
+    #   $A_B = -\frac{1}{\beta}\ln(\Tr_\text{sys}[\exp(-\beta\tilde{H}_\text{sys})]) + \text{constant(from bath)}$
+    exp_βH = matrix_exponential(- β * var_Hamiltonian)
+    A = - log(tr(exp_βH)) / β
+
+    Float64(A)
+end
+
+function min_free_energy_var_hamiltonian(; stepsize::Real, Hamiltonian::AbstractMatrix{<:Number}, Jw::AbstractVector{<:SpectralDensities.SpectralDensity}, svec=[1.0 -1.0], β::Real)
+    @assert (0.0 < stepsize < 1.0)
+
+    Alist = Vector{Float64}()
+    Amin = typemax(Float64)
+    min_varH = Hamiltonian
+    fmin = 0.0
+
+    for f in 0.0:stepsize:1.0
+        F = fill(f, length(Jw))
+        F0 = initial_variational_param_constructor(; Jw=Jw, bathwise_init_param=F)
+
+        varH, _ = variational_hamiltonian(; Hamiltonian=Hamiltonian, Jw=Jw, svec=svec, β=β, var_param=F0)
+
+        A = gibbs_bogoliubov_free_energy(; var_Hamiltonian=varH, β=β)
+        push!(Alist, A)
+
+        if A < Amin
+            Amin = A
+            fmin = f
+            min_varH = varH
+        end
+    end
+
+    min_varH, fmin, Alist
 end
 
 
